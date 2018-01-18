@@ -1,11 +1,11 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="io.github.xudaojie.qrcodelib">
+<manifest package="io.github.xudaojie.qrcodelib"
+          xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <application android:allowBackup="true"
-        android:label="@string/app_name"
-        android:supportsRtl="true"
-    >
+	<uses-permission android:name="android.permission.VIBRATE"/>
 
-    </application>
+	<application
+		android:allowBackup="true"
+		android:label="@string/app_name"
+		android:supportsRtl="true"/>
 
 </manifest>
