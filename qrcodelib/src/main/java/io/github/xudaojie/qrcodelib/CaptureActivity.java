@@ -228,6 +228,7 @@ public abstract class CaptureActivity extends AppCompatActivity
 			mHintTextView.setText(getString(R.string.scan_hint));
 			mHintTextView.setVisibility(View.VISIBLE);
 			mRequestPermissionButton.setVisibility(View.GONE);
+			mFlashButton.setEnabled(true);
 		} else {
 			// User denied
 			if (ActivityCompat
@@ -240,6 +241,7 @@ public abstract class CaptureActivity extends AppCompatActivity
 				mHintTextView.setVisibility(View.GONE);
 				mRequestPermissionButton.setVisibility(View.VISIBLE);
 			}
+			mFlashButton.setEnabled(false);
 		}
 	}
 
