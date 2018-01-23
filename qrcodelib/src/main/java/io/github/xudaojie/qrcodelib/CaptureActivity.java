@@ -1,15 +1,12 @@
 package io.github.xudaojie.qrcodelib;
 
 import android.Manifest;
-import android.annotation.TargetApi;
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.MediaPlayer.OnCompletionListener;
@@ -19,14 +16,19 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.Vibrator;
 import android.support.annotation.NonNull;
+import android.support.design.widget.CoordinatorLayout;
+import android.support.v4.app.ActivityCompat;
+import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceHolder.Callback;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.Window;
+import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.zxing.BarcodeFormat;
@@ -44,7 +46,8 @@ import io.github.xudaojie.qrcodelib.zxing.view.ViewfinderView;
  *
  * @author Ryan.Tang
  */
-public class CaptureActivity extends Activity implements Callback {
+public abstract class CaptureActivity extends AppCompatActivity
+		implements Callback, ViewfinderView.OnDrawListener {
 
 	private static final String TAG = CaptureActivity.class.getSimpleName();
 
@@ -62,7 +65,13 @@ public class CaptureActivity extends Activity implements Callback {
 	private static final float BEEP_VOLUME = 0.10f;
 	private boolean vibrate;
 	private boolean flashLightOpen = false;
-	private ImageButton flashIbtn;
+	private ImageButton mFlashButton;
+
+	private FrameLayout mHintView;
+	private Button mRequestPermissionButton;
+	private TextView mHintTextView;
+
+	private Rect mFrame;
 
 	/**
 	 * Called when the activity is first created.
@@ -74,6 +83,11 @@ public class CaptureActivity extends Activity implements Callback {
 		mActivity = this;
 		hasSurface = false;
 		CameraManager.init(getApplication());
+		requestCameraPermission();
+		initView();
+	}
+
+	private void requestCameraPermission() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
 			if (checkSelfPermission(Manifest.permission.CAMERA) !=
 					PackageManager.PERMISSION_GRANTED) {
@@ -81,15 +95,13 @@ public class CaptureActivity extends Activity implements Callback {
 						REQUEST_PERMISSION_CAMERA);
 			}
 		}
-
-		initView();
 	}
 
 	@Override
 	protected void onResume() {
 		super.onResume();
 		Log.d(TAG, "xxxxxxxxxxxxxxxxxxxonResume");
-		SurfaceView surfaceView = findViewById(R.id.preview_view);
+		SurfaceView surfaceView = findViewById(R.id.view_preview);
 		SurfaceHolder surfaceHolder = surfaceView.getHolder();
 		if (hasSurface) {
 			initCamera(surfaceHolder);
@@ -118,8 +130,8 @@ public class CaptureActivity extends Activity implements Callback {
 			handler.quitSynchronously();
 			handler = null;
 		}
-		if (flashIbtn != null) {
-			flashIbtn.setImageResource(R.drawable.qr_ic_flash_off_white_24dp);
+		if (mFlashButton != null) {
+			mFlashButton.setActivated(false);
 		}
 		CameraManager.get().closeDriver();
 	}
@@ -129,26 +141,12 @@ public class CaptureActivity extends Activity implements Callback {
 	                                       @NonNull int[] grantResults) {
 		super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 		if (grantResults.length > 0 && requestCode == REQUEST_PERMISSION_CAMERA) {
-			if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-				// 未获得Camera权限
-				new AlertDialog.Builder(mActivity).setTitle("提示")
-						.setMessage("请在系统设置中为App开启摄像头权限后重试")
-						.setPositiveButton("确定", new DialogInterface.OnClickListener() {
-
-							@Override
-							public void onClick(DialogInterface dialog, int which) {
-								mActivity.finish();
-							}
-						}).show();
-			}
+			setUpHint(false);
 		}
 	}
 
 	/**
 	 * Handler scan result
-	 *
-	 * @param result
-	 * @param barcode
 	 */
 	public void handleDecode(Result result, Bitmap barcode) {
 		playBeepSoundAndVibrate();
@@ -170,37 +168,77 @@ public class CaptureActivity extends Activity implements Callback {
 	}
 
 	protected void initView() {
-		requestWindowFeature(Window.FEATURE_NO_TITLE);
-		setStatusBarColor(0x61000000);
-		setContentView(R.layout.qr_camera);
+		setTheme(R.style.CaptureTheme);
+		setContentView(R.layout.activity_capture);
 
 		viewfinderView = findViewById(R.id.view_viewfinder);
-		flashIbtn = findViewById(R.id.button_flash);
+		mFlashButton = findViewById(R.id.button_flash);
 
-		flashIbtn.setOnClickListener(new View.OnClickListener() {
+		mHintView = findViewById(R.id.view_hint);
+		mRequestPermissionButton = findViewById(R.id.button_request_permission);
+		mHintTextView = findViewById(R.id.textView_hint);
+
+		setUpHint(true);
+
+		mFlashButton.setOnClickListener(new View.OnClickListener() {
 
 			@Override
 			public void onClick(View v) {
-				if (flashLightOpen) {
-					flashIbtn.setImageResource(R.drawable.qr_ic_flash_off_white_24dp);
-				} else {
-					flashIbtn.setImageResource(R.drawable.qr_ic_flash_on_white_24dp);
-				}
+				mFlashButton.setActivated(!flashLightOpen);
 				toggleFlashLight();
+			}
+		});
+		mRequestPermissionButton.setOnClickListener(new View.OnClickListener() {
+
+			@Override
+			public void onClick(View view) {
+				if (ActivityCompat.shouldShowRequestPermissionRationale(mActivity,
+						Manifest.permission.CAMERA)) {
+					requestCameraPermission();
+				} else {
+					alwaysDeniedCameraPermission();
+				}
 			}
 		});
 	}
 
-	/**
-	 * Sets status-bar color for L devices.
-	 *
-	 * @param color - status-bar color
-	 */
-	@TargetApi(Build.VERSION_CODES.LOLLIPOP)
-	public void setStatusBarColor(int color) {
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			if (getWindow() != null) {
-				getWindow().setStatusBarColor(color);
+	public abstract void alwaysDeniedCameraPermission();
+
+	@Override
+	public void onDraw(Rect frame) {
+		if (mFrame != null && mFrame.equals(frame)) { // skip
+			return;
+		}
+		mFrame = frame;
+		if (frame != null) {
+			CoordinatorLayout.LayoutParams params =
+					((CoordinatorLayout.LayoutParams) mHintView.getLayoutParams());
+			params.topMargin = frame.bottom;
+			params.leftMargin = frame.left;
+			params.rightMargin = frame.right - frame.width();
+			mHintView.requestLayout();
+		}
+	}
+
+	public void setUpHint(boolean firstTime) {
+		if (isFinishing()) {
+			return;
+		}
+		if (CameraManager.get().checkCameraPermission() == PackageManager.PERMISSION_GRANTED) {
+			mHintTextView.setText(getString(R.string.scan_hint));
+			mHintTextView.setVisibility(View.VISIBLE);
+			mRequestPermissionButton.setVisibility(View.GONE);
+		} else {
+			// User denied
+			if (ActivityCompat
+					.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA) ||
+					firstTime) {
+				mHintTextView.setText(getString(R.string.camera_permission_not_granted));
+				mHintTextView.setVisibility(firstTime ? View.VISIBLE : View.GONE);
+				mRequestPermissionButton.setVisibility(!firstTime ? View.VISIBLE : View.GONE);
+			} else { // User choose "Don’t ask again" or Device not support for this permission
+				mHintTextView.setVisibility(View.GONE);
+				mRequestPermissionButton.setVisibility(View.VISIBLE);
 			}
 		}
 	}
@@ -262,7 +300,6 @@ public class CaptureActivity extends Activity implements Callback {
 			hasSurface = true;
 			initCamera(holder);
 		}
-
 	}
 
 	@Override

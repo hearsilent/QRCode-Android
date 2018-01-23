@@ -1,4 +1,9 @@
 <resources>
-    <string name="app_name">qrcodelib</string>
-    <string name="scan_failed">Scan failed!</string>
+
+	<string name="scan_failed">Scan failed!</string>
+	<string name="scan_hint">Place a QR Code inside the viewfinder rectangle to scan it.</string>
+
+	<string name="camera_permission_not_granted">Please give camera permission</string>
+	<string name="request_camera_permission">Request camera permission</string>
+
 </resources>

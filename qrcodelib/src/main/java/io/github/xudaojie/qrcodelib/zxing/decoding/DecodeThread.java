@@ -46,13 +46,11 @@ final class DecodeThread extends Thread {
         this.activity = activity;
         handlerInitLatch = new CountDownLatch(1);
 
-        hints = new Hashtable<DecodeHintType, Object>(3);
+        hints = new Hashtable<>(1);
 
         if (decodeFormats == null || decodeFormats.isEmpty()) {
-            decodeFormats = new Vector<BarcodeFormat>();
-            decodeFormats.addAll(DecodeFormatManager.ONE_D_FORMATS);
+            decodeFormats = new Vector<>();
             decodeFormats.addAll(DecodeFormatManager.QR_CODE_FORMATS);
-            decodeFormats.addAll(DecodeFormatManager.DATA_MATRIX_FORMATS);
         }
 
         hints.put(DecodeHintType.POSSIBLE_FORMATS, decodeFormats);

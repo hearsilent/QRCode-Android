@@ -17,7 +17,6 @@
 package io.github.xudaojie.qrcodelib.zxing.view;
 
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
@@ -26,12 +25,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
-import android.text.Layout;
-import android.text.StaticLayout;
-import android.text.TextPaint;
-import android.text.TextUtils;
 import android.util.AttributeSet;
-import android.util.DisplayMetrics;
 import android.view.View;
 
 import com.google.zxing.ResultPoint;
@@ -40,6 +34,7 @@ import java.util.Collection;
 import java.util.HashSet;
 
 import io.github.xudaojie.qrcodelib.R;
+import io.github.xudaojie.qrcodelib.common.Utils;
 import io.github.xudaojie.qrcodelib.zxing.camera.CameraManager;
 
 /**
@@ -59,42 +54,28 @@ public final class ViewfinderView extends View {
 	private final Paint paint;
 	private final int resultPointColor;
 	private final int angleColor;
-	private String hint;
-	private int hintColor;
-	private String errorHint;
-	private int errorHintColor;
 	private boolean showPossiblePoint;
 	private Bitmap resultBitmap;
 	private Collection<ResultPoint> possibleResultPoints;
 	private Collection<ResultPoint> lastPossibleResultPoints;
 
-	private float translateY = 5f;
-	private int cameraPermission = PackageManager.PERMISSION_DENIED;
+	public interface OnDrawListener {
+
+		void onDraw(Rect frame);
+	}
 
 	// This constructor is used when the class is built from an XML resource.
 	public ViewfinderView(Context context, AttributeSet attrs) {
 		super(context, attrs);
 
-		TypedArray typedArray =
-				context.obtainStyledAttributes(attrs,R.styleable.qr_ViewfinderView);
-		angleColor = Color.WHITE;
-		hint = typedArray.getString(R.styleable.qr_ViewfinderView_qr_hint);
-		hintColor = typedArray.getColor(R.styleable.qr_ViewfinderView_qr_textHintColor, Color.GRAY);
-		errorHint = typedArray.getString(R.styleable.qr_ViewfinderView_qr_errorHint);
-		errorHintColor = typedArray
-				.getColor(R.styleable.qr_ViewfinderView_qr_textErrorHintColor, Color.WHITE);
+		TypedArray typedArray = context.obtainStyledAttributes(attrs, R.styleable.ViewfinderView);
+		angleColor = typedArray.getColor(R.styleable.ViewfinderView_angleColor, Color.WHITE);
 		showPossiblePoint =
-				typedArray.getBoolean(R.styleable.qr_ViewfinderView_qr_showPossiblePoint, false);
+				typedArray.getBoolean(R.styleable.ViewfinderView_showPossiblePoint, false);
 
-		RECT_OFFSET_X = typedArray.getInt(R.styleable.qr_ViewfinderView_qr_offsetX, 0);
-		RECT_OFFSET_Y = typedArray.getInt(R.styleable.qr_ViewfinderView_qr_offsetY, 0);
+		RECT_OFFSET_X = typedArray.getInt(R.styleable.ViewfinderView_offsetX, 0);
+		RECT_OFFSET_Y = typedArray.getInt(R.styleable.ViewfinderView_offsetY, 0);
 
-		if (TextUtils.isEmpty(hint)) {
-			hint = "將二维碼/條形碼置於框内即自動掃描";
-		}
-		if (TextUtils.isEmpty(errorHint)) {
-			errorHint = "請允許相機權限後重試";
-		}
 		if (showPossiblePoint) {
 			ANIMATION_DELAY = 100L;
 		}
@@ -112,14 +93,11 @@ public final class ViewfinderView extends View {
 	public void onDraw(Canvas canvas) {
 		Rect frame = null;
 		if (!isInEditMode()) {
-			if (cameraPermission != PackageManager.PERMISSION_GRANTED) {
-				cameraPermission = CameraManager.get().checkCameraPermission();
-			}
 			frame = CameraManager.get().getFramingRect(RECT_OFFSET_X, RECT_OFFSET_Y);
 		}
 
 		if (frame == null) {
-			// Android Studio中预览时和未获得相机权限时都为null
+			// In Edit Mode or not granted Camera Permission.
 			int screenWidth = getResources().getDisplayMetrics().widthPixels;
 			int screenHeight = getResources().getDisplayMetrics().heightPixels;
 			int width = 675;
@@ -128,7 +106,6 @@ public final class ViewfinderView extends View {
 			int topOffset = (screenHeight - height) / 2;
 			frame = new Rect(leftOffset + RECT_OFFSET_X, topOffset + RECT_OFFSET_Y,
 					leftOffset + width + RECT_OFFSET_X, topOffset + height + RECT_OFFSET_Y);
-			//            return;
 		}
 		int width = canvas.getWidth();
 		int height = canvas.getHeight();
@@ -140,8 +117,6 @@ public final class ViewfinderView extends View {
 		canvas.drawRect(frame.right + 1, frame.top, width, frame.bottom + 1, paint);
 		canvas.drawRect(0, frame.bottom + 1, width, height, paint);
 
-		drawText(canvas, frame);
-
 		if (resultBitmap != null) {
 			// Draw the opaque result bitmap over the scanning rectangle
 			paint.setAlpha(OPAQUE);
@@ -150,12 +125,16 @@ public final class ViewfinderView extends View {
 			drawAngle(canvas, frame);
 			if (showPossiblePoint) {
 				drawPossiblePoint(canvas, frame);
-			}
 
-			// Request another update at the animation interval, but only repaint the laser line,
-			// not the entire viewfinder mask.
-			postInvalidateDelayed(ANIMATION_DELAY, frame.left, frame.top, frame.right,
-					frame.bottom);
+				// Request another update at the animation interval, but only repaint the
+				// possible points, not the entire viewfinder mask.
+				postInvalidateDelayed(ANIMATION_DELAY, frame.left, frame.top, frame.right,
+						frame.bottom);
+			}
+		}
+
+		if (getContext() instanceof OnDrawListener) {
+			((OnDrawListener) getContext()).onDraw(frame);
 		}
 	}
 
@@ -179,13 +158,13 @@ public final class ViewfinderView extends View {
 	}
 
 	private void drawAngle(Canvas canvas, Rect frame) {
-		int angleLength = (int) convertDpToPixel(32, getContext());
-		int angleWidth = (int) convertDpToPixel(4, getContext());
+		int angleLength = (int) Utils.convertDpToPixel(32, getContext());
+		int angleWidth = (int) Utils.convertDpToPixel(4, getContext());
 		int top = frame.top;
 		int bottom = frame.bottom;
 		int left = frame.left;
 		int right = frame.right;
-		float radius = (int) convertDpToPixel(4, getContext());
+		float radius = (int) Utils.convertDpToPixel(4, getContext());
 
 		paint.setColor(angleColor);
 		// 左上
@@ -267,35 +246,9 @@ public final class ViewfinderView extends View {
 
 		path.rLineTo(0, -heightMinusCorners);
 
-		path.close();//Given close, last lineto can be removed.
+		path.close();//Given close, last lineTo can be removed.
 
 		return path;
-	}
-
-	public float convertDpToPixel(float dp, Context context) {
-		return dp * (getDisplayMetrics(context).densityDpi / 160f);
-	}
-
-	public DisplayMetrics getDisplayMetrics(Context context) {
-		Resources resources = context.getResources();
-		return resources.getDisplayMetrics();
-	}
-
-	private void drawText(Canvas canvas, Rect frame) {
-		boolean isPermissionGranted = cameraPermission == PackageManager.PERMISSION_GRANTED;
-
-		TextPaint mTextPaint = new TextPaint();
-		mTextPaint.setColor(isPermissionGranted ? hintColor : errorHintColor);
-		mTextPaint.setTextSize(convertDpToPixel(14, getContext()));
-		StaticLayout mTextLayout =
-				new StaticLayout(isPermissionGranted ? hint : errorHint, mTextPaint,
-						frame.right - frame.left, Layout.Alignment.ALIGN_CENTER, 1.1f, 0.0f, false);
-
-		canvas.save();
-
-		canvas.translate(frame.left, frame.bottom + convertDpToPixel(32, getContext()));
-		mTextLayout.draw(canvas);
-		canvas.restore();
 	}
 
 	// Draw a yellow "possible points"
