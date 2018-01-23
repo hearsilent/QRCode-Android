@@ -178,7 +178,6 @@ public final class ViewfinderView extends View {
 		possibleResultPoints.add(point);
 	}
 
-	// TODO: Let angle with rounded corners
 	private void drawAngle(Canvas canvas, Rect frame) {
 		int angleLength = (int) convertDpToPixel(32, getContext());
 		int angleWidth = (int) convertDpToPixel(4, getContext());

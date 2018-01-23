@@ -55,7 +55,7 @@ final class FlashlightManager {
     }
 
 
-    //FIXME
+    // FIXME
     static void enableFlashlight() {
         setFlashlight(false);
     }
